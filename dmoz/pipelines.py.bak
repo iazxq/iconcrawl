@@ -1,0 +1,99 @@
+# -*- coding: utf-8 -*-
+# Define your item pipelines here
+#
+# Don't forget to add your pipeline to the ITEM_PIPELINES setting
+# See: http://doc.scrapy.org/topics/item-pipeline.html
+import sys
+sys.path.append("D:\\python\\pdbooks")
+
+import json
+import codecs
+import pickle
+import urllib
+import os
+import datetime
+
+import imagefactory
+from common import func
+from model.book import Book
+from facade.book import BookFacade
+from logger import logger
+from scrapy import log
+
+
+class DmozPipeline(object):
+
+    def __init__(self):
+        self.file = codecs.open('c://items.txt', 'wb','utf-8')
+
+    def process_item(self, item, spider):
+        try:
+            spic_file=''
+            mpic_file=''
+            bpic_file=''
+
+						
+
+            #必须有标题和作者才能下载图片
+            if item.get('title','') and item.get('authors',''):
+                #下载图片并生成缩略图
+                #判断路径是否存在，同时是否是图片地址
+                if item['pic'] and item['pic'].lower().endswith(('.jpg','.gif','.png')):
+                    try:
+                        save_path = func.get_new_upload_dir()
+                        new_filename = func.get_new_filename(item['pic'])
+                        pic = new_filename
+                        spic = 's' + new_filename
+                        mpic = 'm' + new_filename
+                        bpic = 'b' + new_filename
+                        if not os.path.exists(save_path):
+                            os.makedirs(save_path)
+                        pic_file = os.path.join(save_path,pic).replace('\\','/')
+                        spic_file = os.path.join(save_path,spic).replace('\\','/')
+                        mpic_file = os.path.join(save_path,mpic).replace('\\','/')
+                        bpic_file = os.path.join(save_path,bpic).replace('\\','/')
+                        urllib.urlretrieve(item['pic'],pic_file)
+                        imagefactory.create_small_pic(pic_file,100,spic_file)
+                        imagefactory.create_small_pic(pic_file,150,mpic_file)
+                        imagefactory.create_small_pic(pic_file,500,bpic_file)
+                    except Exception as e:
+                      	#logger.error(u'生成图片失败：%s'%(e.message,))
+                      	pass
+                      	
+            log.msg(u'pic process finished')
+
+            book=Book()
+            book.id = func.create_new_id()
+            book.title = item.get('title','')
+            book.sub_title = item.get('sub_title','')
+            book.original_title = item.get('original_title','')
+            book.authors = item.get('authors','')
+            book.translators = item.get('translators','')
+            book.authors_intro = item.get('authors_intro','')
+            book.summary = item.get('summary','')
+            book.tags = item.get('tags','')
+            book.dir = item.get('dir','')
+            book.spic = spic_file
+            book.mpic = mpic_file
+            book.bpic = bpic_file
+            book.isbn = item.get('isbn','')
+            book.pages = item.get('pages','')
+            book.price = item.get('price',0)
+            book.publisher = item.get('publisher','')
+            book.binding = item.get('binding','')
+            book.pubdate = item.get('pub_date',datetime.datetime.now())
+            book.isrtdate = datetime.datetime.now()
+
+            #logger.debug(book.isbn)
+
+            if book.title and book.authors:
+            		log.msg('saving data...')
+                book_facade = BookFacade()
+                book_facade.insert(book)
+                log.msg(u'save data sucess')
+                logger.info(u'采集完成：id=%s,title=%s'%(book.id,book.title,))
+        except Exception as e:
+            #logger.error(u'采集失败：%s'%(e.message,))
+            pass
+
+        return item
